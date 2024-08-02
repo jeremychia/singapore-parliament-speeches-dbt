@@ -1,0 +1,55 @@
+
+
+-- sources
+with
+    attendance as (
+        select date, member_name, is_present from `singapore-parliament-speeches`.`prod_fact`.`fact_attendance`
+    ),
+
+    sittings as (select date, parliament, session from `singapore-parliament-speeches`.`prod_fact`.`fact_sittings`),
+
+    members as (
+        select member_name, party, gender, member_ethnicity
+        from `singapore-parliament-speeches`.`prod_dim`.`dim_members`
+    ),
+
+    member_constituency as (
+        select
+            member_name,
+            member_position as constituency,
+            effective_from_date,
+            coalesce(effective_to_date, current_date()) as effective_to_date
+        from `singapore-parliament-speeches`.`prod_fact`.`fact_member_positions`
+        where type = 'constituency'
+    ),
+
+    joined as (
+        select
+            -- metadata
+            attendance.date,
+            sittings.parliament,
+            sittings.session,
+
+            -- member information
+            attendance.member_name,
+            members.party as member_party,
+            members.gender as member_gender,
+            members.member_ethnicity as member_ethnicity,
+            member_constituency.constituency as member_constituency,
+
+            -- attendance information
+            attendance.is_present
+
+        from attendance
+        left join sittings on attendance.date = sittings.date
+        left join members on attendance.member_name = members.member_name
+        left join
+            member_constituency
+            on attendance.member_name = member_constituency.member_name
+            and attendance.date
+            between member_constituency.effective_from_date
+            and member_constituency.effective_to_date
+    )
+
+select *
+from joined
